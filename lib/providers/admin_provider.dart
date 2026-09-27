@@ -96,11 +96,40 @@ class AdminProvider extends ChangeNotifier {
 
   // Iniciar sesión de Administrador
   Future<bool> loginAdmin(String email, String password) async {
-    await Future.delayed(const Duration(milliseconds: 600));
-
     final normalizedEmail = email.trim().toLowerCase();
-    
-    // Validar con la lista de admins o credenciales maestras
+
+    // 1. Intentar validar con Supabase primero si está configurado
+    if (SupabaseConfig.isConfigured) {
+      try {
+        final supabase = Supabase.instance.client;
+        final response = await supabase
+            .from('admin_users')
+            .select()
+            .eq('email', normalizedEmail)
+            .maybeSingle();
+
+        if (response != null && response['is_active'] == true) {
+          _currentAdmin = AdminUserModel(
+            id: response['id'].toString(),
+            name: response['name'].toString(),
+            email: response['email'].toString(),
+            phone: response['phone']?.toString() ?? '',
+            role: _parseRole(response['role']?.toString()),
+            isActive: true,
+            createdAt: DateTime.tryParse(response['created_at']?.toString() ?? '') ?? DateTime.now(),
+          );
+          _isAuthenticated = true;
+          _loadAdminUsersFromSupabase();
+          notifyListeners();
+          return true;
+        }
+      } catch (e) {
+        debugPrint('Nota CRM Supabase login: $e');
+      }
+    }
+
+    // 2. Validación local con lista o credencial maestra
+    await Future.delayed(const Duration(milliseconds: 300));
     final found = _adminUsers.firstWhere(
       (u) => u.email.toLowerCase() == normalizedEmail && u.isActive,
       orElse: () {

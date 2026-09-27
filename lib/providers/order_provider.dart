@@ -150,6 +150,19 @@ class OrderProvider extends ChangeNotifier {
     }
 
     notifyListeners();
+
+    if (SupabaseConfig.isConfigured) {
+      _updateOrderStatusInSupabase(orderId, nextStatus.name);
+    }
+  }
+
+  Future<void> _updateOrderStatusInSupabase(String orderId, String status) async {
+    try {
+      final supabase = Supabase.instance.client;
+      await supabase.from('orders').update({'status': status}).eq('id', orderId);
+    } catch (e) {
+      debugPrint('Nota Supabase actualización pedido: $e');
+    }
   }
 
   // Simulate progress automatically every 8 seconds for a lively demo
@@ -182,6 +195,10 @@ class OrderProvider extends ChangeNotifier {
       }
       _simulationTimer?.cancel();
       notifyListeners();
+
+      if (SupabaseConfig.isConfigured) {
+        _updateOrderStatusInSupabase(orderId, 'cancelled');
+      }
     }
   }
 
