@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/food_item_model.dart';
 import '../models/restaurant_model.dart';
+import '../providers/auth_provider.dart';
 import '../providers/cart_provider.dart';
 import '../theme/app_colors.dart';
 import 'custom_network_image.dart';
@@ -57,11 +58,32 @@ class _FoodItemDetailSheetState extends State<FoodItemDetailSheet> {
 
     if (success) {
       Navigator.pop(context);
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final currentAddress = auth.selectedAddress;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('¡Se agregó ${widget.foodItem.name} a tu carrito!'),
-          backgroundColor: AppColors.textPrimary,
-          duration: const Duration(seconds: 2),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '¡Se agregó ${widget.foodItem.name} a tu carrito!',
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '📍 Entregar en: ${currentAddress.label} (${currentAddress.street} #${currentAddress.number})',
+                style: const TextStyle(fontSize: 11.5, color: Colors.white70),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFF1E293B),
+          duration: const Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           action: SnackBarAction(
             label: 'VER CARRITO',
             textColor: AppColors.primary,
