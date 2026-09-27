@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../core/supabase_config.dart';
 import '../models/address_model.dart';
 import '../models/cart_item_model.dart';
 import '../models/food_item_model.dart';
@@ -63,10 +65,50 @@ class OrderProvider extends ChangeNotifier {
     _currentActiveOrder = newOrder;
     notifyListeners();
 
+    if (SupabaseConfig.isConfigured) {
+      _saveOrderToSupabase(newOrder);
+    }
+
     // Start auto simulation of order progress
     _startOrderSimulation(newOrder.id);
 
     return newOrder;
+  }
+
+  Future<void> _saveOrderToSupabase(OrderModel order) async {
+    try {
+      final supabase = Supabase.instance.client;
+      await supabase.from('orders').insert({
+        'id': order.id,
+        'user_id': (order.userId.startsWith('usr_') || order.userId.startsWith('user_')) ? null : order.userId,
+        'restaurant_id': order.restaurantId,
+        'restaurant_name': order.restaurantName,
+        'status': order.status.name,
+        'subtotal': order.subtotal,
+        'delivery_fee': order.deliveryFee,
+        'service_fee': 1.00,
+        'discount': order.discount,
+        'total': order.total,
+        'delivery_address': '${order.address.street} ${order.address.number}, ${order.address.city}',
+        'payment_method': order.paymentMethod.title,
+        'driver_name': order.driverName,
+        'driver_phone': order.driverPhone,
+      });
+
+      for (final item in order.items) {
+        await supabase.from('order_items').insert({
+          'order_id': order.id,
+          'food_item_id': item.foodItem.id,
+          'food_item_name': item.foodItem.name,
+          'food_item_price': item.foodItem.price,
+          'food_item_image': item.foodItem.imageUrl,
+          'quantity': item.quantity,
+          'special_instructions': item.specialInstructions,
+        });
+      }
+    } catch (e) {
+      debugPrint('Nota: Guardado de orden en Supabase: $e');
+    }
   }
 
   void setActiveOrder(OrderModel order) {
