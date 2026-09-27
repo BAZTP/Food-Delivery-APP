@@ -240,3 +240,33 @@ on conflict (id) do update set
   category = excluded.category,
   is_popular = excluded.is_popular,
   is_available = excluded.is_available;
+
+-- ==============================================================================
+-- 10. TABLA DE USUARIOS ADMINISTRATIVOS Y OPERADORES CRM
+-- ==============================================================================
+create table if not exists public.admin_users (
+  id text primary key,
+  name text not null,
+  email text not null unique,
+  phone text,
+  role text not null default 'orderManager',
+  is_active boolean default true,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.admin_users enable row level security;
+drop policy if exists "Acceso total admin_users" on public.admin_users;
+create policy "Acceso total admin_users" on public.admin_users for all using (true);
+
+-- Insertar operadores iniciales
+insert into public.admin_users (id, name, email, phone, role, is_active)
+values
+  ('adm_001', 'Bryan Zambrano', 'admin@quickfood.com', '+593 99 876 5432', 'superAdmin', true),
+  ('adm_002', 'Carlos Mendoza', 'carlos.despacho@quickfood.com', '+593 98 765 4321', 'deliveryDispatcher', true),
+  ('adm_003', 'María Elena Torres', 'maria.cocina@quickfood.com', '+593 97 654 3210', 'kitchenOperator', true),
+  ('adm_004', 'Andrés Gómez', 'andres.pedidos@quickfood.com', '+593 96 543 2109', 'orderManager', true)
+on conflict (id) do update set
+  name = excluded.name,
+  phone = excluded.phone,
+  role = excluded.role,
+  is_active = excluded.is_active;

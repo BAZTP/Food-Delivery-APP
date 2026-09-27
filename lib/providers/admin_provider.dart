@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../core/supabase_config.dart';
 import '../models/admin_user_model.dart';
 
 class AdminProvider extends ChangeNotifier {
@@ -44,9 +46,53 @@ class AdminProvider extends ChangeNotifier {
     ),
   ];
 
+  AdminProvider() {
+    _loadAdminUsersFromSupabase();
+  }
+
   AdminUserModel? get currentAdmin => _currentAdmin;
   bool get isAuthenticated => _isAuthenticated && _currentAdmin != null;
   List<AdminUserModel> get adminUsers => List.unmodifiable(_adminUsers);
+
+  AdminRole _parseRole(String? roleStr) {
+    switch (roleStr) {
+      case 'superAdmin':
+        return AdminRole.superAdmin;
+      case 'deliveryDispatcher':
+        return AdminRole.deliveryDispatcher;
+      case 'kitchenOperator':
+        return AdminRole.kitchenOperator;
+      case 'orderManager':
+      default:
+        return AdminRole.orderManager;
+    }
+  }
+
+  // Carga remota de operadores desde Supabase (si existe la tabla)
+  Future<void> _loadAdminUsersFromSupabase() async {
+    if (!SupabaseConfig.isConfigured) return;
+    try {
+      final supabase = Supabase.instance.client;
+      final data = await supabase.from('admin_users').select();
+      if (data.isNotEmpty) {
+        _adminUsers.clear();
+        for (final row in data) {
+          _adminUsers.add(AdminUserModel(
+            id: row['id']?.toString() ?? 'adm_${DateTime.now().millisecondsSinceEpoch}',
+            name: row['name']?.toString() ?? 'Operador',
+            email: row['email']?.toString() ?? '',
+            phone: row['phone']?.toString() ?? '',
+            role: _parseRole(row['role']?.toString()),
+            isActive: row['is_active'] == true,
+            createdAt: DateTime.tryParse(row['created_at']?.toString() ?? '') ?? DateTime.now(),
+          ));
+        }
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Nota CRM: usando lista local de operadores: $e');
+    }
+  }
 
   // Iniciar sesión de Administrador
   Future<bool> loginAdmin(String email, String password) async {
@@ -108,6 +154,26 @@ class AdminProvider extends ChangeNotifier {
     );
     _adminUsers.insert(0, newUser);
     notifyListeners();
+
+    if (SupabaseConfig.isConfigured) {
+      _saveAdminUserToSupabase(newUser);
+    }
+  }
+
+  Future<void> _saveAdminUserToSupabase(AdminUserModel user) async {
+    try {
+      final supabase = Supabase.instance.client;
+      await supabase.from('admin_users').insert({
+        'id': user.id,
+        'name': user.name,
+        'email': user.email,
+        'phone': user.phone,
+        'role': user.role.name,
+        'is_active': user.isActive,
+      });
+    } catch (e) {
+      debugPrint('Nota CRM: guardando operador local: $e');
+    }
   }
 
   // Activar o desactivar operador
@@ -115,10 +181,23 @@ class AdminProvider extends ChangeNotifier {
     final index = _adminUsers.indexWhere((u) => u.id == id);
     if (index != -1) {
       final current = _adminUsers[index];
-      // No permitir desactivar al superAdmin principal
-      if (current.id == 'adm_001') return;
-      _adminUsers[index] = current.copyWith(isActive: !current.isActive);
+      if (current.id == 'adm_001') return; // Proteger superadmin
+      final updated = current.copyWith(isActive: !current.isActive);
+      _adminUsers[index] = updated;
       notifyListeners();
+
+      if (SupabaseConfig.isConfigured) {
+        _updateAdminStatusInSupabase(id, updated.isActive);
+      }
+    }
+  }
+
+  Future<void> _updateAdminStatusInSupabase(String id, bool isActive) async {
+    try {
+      final supabase = Supabase.instance.client;
+      await supabase.from('admin_users').update({'is_active': isActive}).eq('id', id);
+    } catch (e) {
+      debugPrint('Nota CRM: actualización local de estado: $e');
     }
   }
 
@@ -128,13 +207,39 @@ class AdminProvider extends ChangeNotifier {
     if (index != -1) {
       _adminUsers[index] = _adminUsers[index].copyWith(role: newRole);
       notifyListeners();
+
+      if (SupabaseConfig.isConfigured) {
+        _updateAdminRoleInSupabase(id, newRole.name);
+      }
+    }
+  }
+
+  Future<void> _updateAdminRoleInSupabase(String id, String roleName) async {
+    try {
+      final supabase = Supabase.instance.client;
+      await supabase.from('admin_users').update({'role': roleName}).eq('id', id);
+    } catch (e) {
+      debugPrint('Nota CRM: actualización local de rol: $e');
     }
   }
 
   // Eliminar usuario de control
   void deleteUser(String id) {
-    if (id == 'adm_001') return; // Proteger superadmin
+    if (id == 'adm_001') return;
     _adminUsers.removeWhere((u) => u.id == id);
     notifyListeners();
+
+    if (SupabaseConfig.isConfigured) {
+      _deleteAdminUserFromSupabase(id);
+    }
+  }
+
+  Future<void> _deleteAdminUserFromSupabase(String id) async {
+    try {
+      final supabase = Supabase.instance.client;
+      await supabase.from('admin_users').delete().eq('id', id);
+    } catch (e) {
+      debugPrint('Nota CRM: eliminación local: $e');
+    }
   }
 }
