@@ -270,3 +270,38 @@ on conflict (id) do update set
   phone = excluded.phone,
   role = excluded.role,
   is_active = excluded.is_active;
+
+-- ==============================================================================
+-- 11. FUNCIÓN RPC PARA RESTABLECER CONTRASEÑA DIRECTAMENTE (SIN VERIFICACIÓN DE EMAIL)
+-- ==============================================================================
+-- Esta función permite restablecer la contraseña directamente en auth.users
+-- sin requerir que el usuario tenga que esperar correos SMTP o confirmaciones.
+create or replace function public.reset_user_password(user_email text, new_password text)
+returns boolean as $$
+declare
+  target_user_id uuid;
+begin
+  select id into target_user_id from auth.users where lower(email) = lower(user_email);
+  if target_user_id is null then
+    return false;
+  end if;
+  update auth.users
+  set encrypted_password = crypt(new_password, gen_salt('bf'))
+  where id = target_user_id;
+  return true;
+end;
+$$ language plpgsql security definer;
+
+grant execute on function public.reset_user_password to anon, authenticated, service_role;
+
+-- ==============================================================================
+-- ⚠️ NOTA PARA DESACTIVAR LA CONFIRMACIÓN OBLIGATORIA DE CORREO EN SUPABASE:
+-- 1. Ve a tu panel de Supabase: https://supabase.com
+-- 2. Ve a 'Authentication' en el menú lateral izquierdo.
+-- 3. Entra en 'Providers' -> Haz clic en 'Email'.
+-- 4. DESMARCA la casilla: 'Confirm email' (o 'Enable Email Confirmations').
+-- 5. Haz clic en 'Save' (Guardar).
+-- De esta forma, cualquier usuario nuevo podrá registrarse e ingresar al instante
+-- sin tener que confirmar su correo por link.
+-- ==============================================================================
+

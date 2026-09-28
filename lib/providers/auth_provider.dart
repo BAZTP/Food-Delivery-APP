@@ -175,7 +175,28 @@ class AuthProvider extends ChangeNotifier {
     return false;
   }
 
-  // Registro de nuevo usuario
+  // Comprobar si un correo ya se encuentra registrado
+  Future<bool> checkEmailExists(String email) async {
+    final cleanEmail = email.trim().toLowerCase();
+    if (cleanEmail.isEmpty || !cleanEmail.contains('@')) return false;
+
+    if (SupabaseConfig.isConfigured) {
+      try {
+        final res = await Supabase.instance.client
+            .from('profiles')
+            .select('id, email')
+            .eq('email', cleanEmail)
+            .maybeSingle();
+        return res != null;
+      } catch (e) {
+        debugPrint('Comprobando existencia de correo: $e');
+        return false;
+      }
+    }
+    return false;
+  }
+
+  // Registro de nuevo usuario (sin requerir confirmación por correo)
   Future<bool> register({
     required String name,
     required String email,
@@ -183,25 +204,56 @@ class AuthProvider extends ChangeNotifier {
     required String password,
   }) async {
     _errorMessage = null;
+    final cleanEmail = email.trim().toLowerCase();
 
     if (SupabaseConfig.isConfigured) {
       try {
+        // 1. Validar proactivamente en la tabla de perfiles si el correo ya existe
+        final existsInProfiles = await checkEmailExists(cleanEmail);
+        if (existsInProfiles) {
+          _errorMessage = 'El correo "$cleanEmail" ya está registrado. Por favor inicia sesión o recupera tu contraseña.';
+          notifyListeners();
+          return false;
+        }
+
+        // 2. Ejecutar registro en Supabase Auth
         final response = await Supabase.instance.client.auth.signUp(
-          email: email,
+          email: cleanEmail,
           password: password,
           data: {
-            'full_name': name,
-            'phone': phone,
+            'full_name': name.trim(),
+            'phone': phone.trim(),
           },
         );
 
+        // Supabase oculta usuarios duplicados devolviendo un usuario con lista identities vacía
+        if (response.user != null &&
+            response.user!.identities != null &&
+            response.user!.identities!.isEmpty) {
+          _errorMessage = 'El correo "$cleanEmail" ya se encuentra registrado. Inicia sesión o recupera tu contraseña.';
+          notifyListeners();
+          return false;
+        }
+
         if (response.user != null) {
           final user = response.user!;
+
+          // Intentar iniciar sesión automáticamente para obtener sesión activa
+          try {
+            await Supabase.instance.client.auth.signInWithPassword(
+              email: cleanEmail,
+              password: password,
+            );
+          } catch (_) {
+            // Si la confirmación por correo aún está activa en el proyecto de Supabase,
+            // no bloqueamos al usuario y le permitimos entrar inmediatamente
+          }
+
           _currentUser = UserModel(
             id: user.id,
-            name: name,
-            email: user.email ?? email,
-            phone: phone,
+            name: name.trim(),
+            email: cleanEmail,
+            phone: phone.trim(),
             defaultAddressId: _selectedAddress.id,
           );
           _isAuthenticated = true;
@@ -209,7 +261,14 @@ class AuthProvider extends ChangeNotifier {
           return true;
         }
       } on AuthException catch (e) {
-        _errorMessage = e.message;
+        final msg = e.message.toLowerCase();
+        if (msg.contains('already registered') ||
+            msg.contains('already exists') ||
+            msg.contains('user_already_exists')) {
+          _errorMessage = 'El correo "$cleanEmail" ya está registrado. Inicia sesión o recupera tu contraseña.';
+        } else {
+          _errorMessage = e.message;
+        }
         notifyListeners();
         return false;
       } catch (e) {
@@ -221,9 +280,9 @@ class AuthProvider extends ChangeNotifier {
       await Future.delayed(const Duration(milliseconds: 500));
       _currentUser = UserModel(
         id: 'usr_${DateTime.now().millisecondsSinceEpoch}',
-        name: name,
-        email: email,
-        phone: phone,
+        name: name.trim(),
+        email: cleanEmail,
+        phone: phone.trim(),
         defaultAddressId: _selectedAddress.id,
       );
       _isAuthenticated = true;
@@ -231,6 +290,78 @@ class AuthProvider extends ChangeNotifier {
       return true;
     }
     return false;
+  }
+
+  // Restablecer contraseña directamente (sin requerir verificación de correo)
+  Future<Map<String, dynamic>> resetPasswordDirectly({
+    required String email,
+    required String newPassword,
+  }) async {
+    final cleanEmail = email.trim().toLowerCase();
+
+    if (SupabaseConfig.isConfigured) {
+      try {
+        // Verificar si el correo existe
+        final exists = await checkEmailExists(cleanEmail);
+        if (!exists) {
+          return {
+            'success': false,
+            'message': 'No existe ninguna cuenta registrada con el correo "$cleanEmail".',
+          };
+        }
+
+        // Llamar a función RPC para actualizar contraseña en la base de datos
+        final result = await Supabase.instance.client.rpc(
+          'reset_user_password',
+          params: {
+            'user_email': cleanEmail,
+            'new_password': newPassword,
+          },
+        );
+
+        if (result == true) {
+          return {
+            'success': true,
+            'message': '¡Tu contraseña ha sido restablecida exitosamente! Ya puedes iniciar sesión.',
+          };
+        }
+
+        // Si la función RPC devuelve false o no existe, intentar enviar correo
+        return await sendPasswordResetEmail(cleanEmail);
+      } catch (e) {
+        debugPrint('Error en reset_user_password RPC: $e');
+        // Si no está instalada la función RPC, intentar con el método nativo de Supabase
+        return await sendPasswordResetEmail(cleanEmail);
+      }
+    } else {
+      await Future.delayed(const Duration(milliseconds: 400));
+      return {
+        'success': true,
+        'message': '¡Contraseña restablecida correctamente en modo de prueba!',
+      };
+    }
+  }
+
+  // Enviar correo de restablecimiento vía Supabase Auth
+  Future<Map<String, dynamic>> sendPasswordResetEmail(String email) async {
+    final cleanEmail = email.trim().toLowerCase();
+    try {
+      await Supabase.instance.client.auth.resetPasswordForEmail(cleanEmail);
+      return {
+        'success': true,
+        'message': 'Se ha enviado un enlace de recuperación al correo "$cleanEmail". Revisa tu bandeja de entrada o spam.',
+      };
+    } on AuthException catch (e) {
+      return {
+        'success': false,
+        'message': 'No se pudo enviar el correo de recuperación: ${e.message}',
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Error al intentar restablecer: $e',
+      };
+    }
   }
 
   // Cerrar Sesión

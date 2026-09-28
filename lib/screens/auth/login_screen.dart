@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/admin_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/forgot_password_modal.dart';
 import '../admin/admin_dashboard_screen.dart';
 import '../main_screen.dart';
 import 'register_screen.dart';
@@ -337,7 +338,31 @@ class _LoginScreenState extends State<LoginScreen> {
                     },
                   ),
 
-                  const SizedBox(height: 24),
+                  if (!isAdmin) ...[
+                    const SizedBox(height: 6),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () {
+                          ForgotPasswordModal.show(
+                            context,
+                            initialEmail: _emailController.text.trim(),
+                          );
+                        },
+                        child: const Text(
+                          '¿Olvidaste tu contraseña?',
+                          style: TextStyle(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ] else
+                    const SizedBox(height: 18),
+
+                  const SizedBox(height: 6),
 
                   // Login button
                   SizedBox(
