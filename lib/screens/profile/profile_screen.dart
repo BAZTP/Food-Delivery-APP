@@ -207,14 +207,21 @@ class ProfileScreen extends StatelessWidget {
           ),
           ElevatedButton(
             onPressed: () {
-              if (streetCtrl.text.isNotEmpty && numberCtrl.text.isNotEmpty) {
+              if (streetCtrl.text.trim().isNotEmpty) {
                 Provider.of<AuthProvider>(context, listen: false).addAddress(
-                  label: labelCtrl.text.trim(),
+                  label: labelCtrl.text.trim().isEmpty ? 'Mi Ubicación' : labelCtrl.text.trim(),
                   street: streetCtrl.text.trim(),
                   number: numberCtrl.text.trim(),
                   reference: refCtrl.text.trim(),
+                  selectAsCurrent: true,
                 );
                 Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('📍 Dirección guardada y establecida como principal'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
               }
             },
             child: const Text('Guardar'),

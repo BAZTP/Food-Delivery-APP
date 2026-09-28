@@ -77,7 +77,8 @@ class AuthProvider extends ChangeNotifier {
     required String street,
     required String number,
     String reference = '',
-    String city = 'Ciudad',
+    String city = 'Quito',
+    bool selectAsCurrent = true,
   }) {
     final newAddress = AddressModel(
       id: 'addr_${DateTime.now().millisecondsSinceEpoch}',
@@ -86,12 +87,33 @@ class AuthProvider extends ChangeNotifier {
       number: number,
       reference: reference,
       city: city,
-      isDefault: _addresses.isEmpty,
+      isDefault: selectAsCurrent || _addresses.isEmpty,
     );
-    _addresses.add(newAddress);
-    if (_addresses.length == 1) {
+    _addresses.insert(0, newAddress);
+    if (selectAsCurrent) {
       _selectedAddress = newAddress;
     }
+    notifyListeners();
+  }
+
+  void updateLocationDirectly({
+    required String label,
+    required String street,
+    String number = '',
+    String reference = '',
+    String city = 'Quito',
+  }) {
+    final newAddress = AddressModel(
+      id: 'addr_gps_${DateTime.now().millisecondsSinceEpoch}',
+      label: label,
+      street: street,
+      number: number,
+      reference: reference,
+      city: city,
+      isDefault: true,
+    );
+    _addresses.insert(0, newAddress);
+    _selectedAddress = newAddress;
     notifyListeners();
   }
 

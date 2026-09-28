@@ -5,6 +5,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/order_provider.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/address_selector_modal.dart';
 import '../orders/order_tracking_screen.dart';
 
 class CheckoutScreen extends StatefulWidget {
@@ -89,15 +90,18 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           children: [
             // 1. DELIVERY ADDRESS
             _buildSectionHeader('Dirección de entrega'),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Row(
-                children: [
+            InkWell(
+              onTap: () => AddressSelectorModal.show(context),
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Row(
+                  children: [
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: const BoxDecoration(
@@ -157,6 +161,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 ],
               ),
             ),
+          ),
 
             const SizedBox(height: 20),
 

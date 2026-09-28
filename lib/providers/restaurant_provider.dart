@@ -9,21 +9,24 @@ class RestaurantProvider extends ChangeNotifier {
   final List<FoodCategoryModel> _categories = List.from(MockData.categories);
   String _selectedCategoryId = 'cat_all';
   String _searchQuery = '';
-  final Set<String> _favoriteRestaurantIds = {};
+  final Set<String> _favoriteDishIds = {};
 
   List<RestaurantModel> get restaurants => _restaurants;
   List<FoodCategoryModel> get categories => _categories;
   String get selectedCategoryId => _selectedCategoryId;
   String get searchQuery => _searchQuery;
-  Set<String> get favoriteRestaurantIds => _favoriteRestaurantIds;
+  Set<String> get favoriteDishIds => _favoriteDishIds;
 
-  bool isFavorite(String restaurantId) => _favoriteRestaurantIds.contains(restaurantId);
+  // Dedicated single restaurant
+  RestaurantModel get pizzeria => _restaurants.first;
 
-  void toggleFavorite(String restaurantId) {
-    if (_favoriteRestaurantIds.contains(restaurantId)) {
-      _favoriteRestaurantIds.remove(restaurantId);
+  bool isFavorite(String id) => _favoriteDishIds.contains(id);
+
+  void toggleFavorite(String id) {
+    if (_favoriteDishIds.contains(id)) {
+      _favoriteDishIds.remove(id);
     } else {
-      _favoriteRestaurantIds.add(restaurantId);
+      _favoriteDishIds.add(id);
     }
     notifyListeners();
   }
@@ -38,38 +41,26 @@ class RestaurantProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Filtered restaurants based on category and search query
-  List<RestaurantModel> get filteredRestaurants {
-    return _restaurants.where((restaurant) {
-      final matchesCategory = _selectedCategoryId == 'cat_all' ||
-          restaurant.categoryId == _selectedCategoryId ||
-          restaurant.category.toLowerCase().contains(_selectedCategoryName.toLowerCase());
-
+  // Filtered dishes for current pizzeria category & search
+  List<FoodItemModel> get filteredMenuDishes {
+    return pizzeria.menu.where((item) {
+      final matchesCategory = _selectedCategoryId == 'cat_all' || item.categoryId == _selectedCategoryId;
       final matchesSearch = _searchQuery.isEmpty ||
-          restaurant.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          restaurant.category.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          restaurant.description.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          restaurant.menu.any((item) =>
-              item.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-              item.description.toLowerCase().contains(_searchQuery.toLowerCase()));
-
+          item.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          item.description.toLowerCase().contains(_searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
     }).toList();
   }
 
-  String get _selectedCategoryName {
-    final cat = _categories.firstWhere(
-      (c) => c.id == _selectedCategoryId,
-      orElse: () => _categories.first,
-    );
-    return cat.name;
+  // Filtered restaurants (keeps backward compatibility for widgets using it)
+  List<RestaurantModel> get filteredRestaurants {
+    return _restaurants;
   }
 
-  // Filtered dishes for global search
+  // Dishes for global search
   List<FoodItemModel> get searchDishes {
-    if (_searchQuery.trim().isEmpty) return [];
-    final all = MockData.allDishes;
-    return all.where((dish) {
+    if (_searchQuery.trim().isEmpty) return pizzeria.menu;
+    return pizzeria.menu.where((dish) {
       return dish.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           dish.description.toLowerCase().contains(_searchQuery.toLowerCase());
     }).toList();
@@ -77,25 +68,18 @@ class RestaurantProvider extends ChangeNotifier {
 
   // Popular dishes
   List<FoodItemModel> get popularDishes {
-    return MockData.allDishes.where((d) => d.isPopular).toList();
+    return pizzeria.menu.where((d) => d.isPopular).toList();
   }
 
   // Featured restaurants
-  List<RestaurantModel> get featuredRestaurants {
-    return _restaurants.where((r) => r.isFeatured).toList();
-  }
+  List<RestaurantModel> get featuredRestaurants => _restaurants;
 
-  // Favorite restaurants
-  List<RestaurantModel> get favoriteRestaurants {
-    return _restaurants.where((r) => _favoriteRestaurantIds.contains(r.id)).toList();
-  }
-
-  // Get by ID
+  // Get restaurant by ID
   RestaurantModel? getRestaurantById(String id) {
     try {
       return _restaurants.firstWhere((r) => r.id == id);
     } catch (_) {
-      return null;
+      return _restaurants.isNotEmpty ? _restaurants.first : null;
     }
   }
 }

@@ -73,7 +73,7 @@ class _FoodItemDetailSheetState extends State<FoodItemDetailSheet> {
               ),
               const SizedBox(height: 2),
               Text(
-                '📍 Entregar en: ${currentAddress.label} (${currentAddress.street} #${currentAddress.number})',
+                '📍 Entregar en: ${currentAddress.label} (${currentAddress.fullAddress})',
                 style: const TextStyle(fontSize: 11.5, color: Colors.white70),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,

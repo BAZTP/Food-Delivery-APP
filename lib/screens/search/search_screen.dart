@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../providers/cart_provider.dart';
 import '../../providers/restaurant_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/category_item.dart';
@@ -7,9 +8,8 @@ import '../../widgets/custom_search_bar.dart';
 import '../../widgets/empty_state_view.dart';
 import '../../widgets/food_item_card.dart';
 import '../../widgets/food_item_detail_sheet.dart';
-import '../../widgets/restaurant_card.dart';
 import '../../widgets/section_header.dart';
-import '../restaurant/restaurant_detail_screen.dart';
+import '../cart/cart_screen.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -37,15 +37,16 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     final restaurantProvider = Provider.of<RestaurantProvider>(context);
-    final filteredRestaurants = restaurantProvider.filteredRestaurants;
-    final searchDishes = restaurantProvider.searchDishes;
+    final cartProvider = Provider.of<CartProvider>(context, listen: false);
+    final pizzeria = restaurantProvider.pizzeria;
+    final searchDishes = restaurantProvider.filteredMenuDishes;
     final categories = restaurantProvider.categories;
     final hasSearch = restaurantProvider.searchQuery.isNotEmpty;
 
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Explorar & Buscar'),
+        title: const Text('Buscar en Napoli Pizza 🍕'),
         backgroundColor: AppColors.surface,
         elevation: 0,
       ),
@@ -57,7 +58,7 @@ class _SearchScreenState extends State<SearchScreen> {
             // Search Input
             CustomSearchBar(
               controller: _controller,
-              hintText: 'Buscar hamburguesa, sushi, pizza...',
+              hintText: 'Buscar pizza, calzone, entradas, postres...',
               onChanged: (val) {
                 restaurantProvider.setSearchQuery(val);
               },
@@ -91,7 +92,7 @@ class _SearchScreenState extends State<SearchScreen> {
             // Quick suggestion tags if no search entered
             if (!hasSearch) ...[
               const Text(
-                'Búsquedas populares',
+                'Pizzas Populares',
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
@@ -103,12 +104,13 @@ class _SearchScreenState extends State<SearchScreen> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  'Smash Bacon',
-                  'Pizza Pepperoni',
-                  'Poke Bowl',
-                  'Alitas Buffalo',
-                  'Cheesecake',
-                  'Envío Gratis',
+                  'Pepperoni Supremo',
+                  'Margherita D.O.P.',
+                  'Cuatro Quesos & Miel',
+                  'Trufa & Burrata',
+                  'Palitroques',
+                  'Calzone Napolitano',
+                  'Tiramisú',
                 ].map((tag) {
                   return ActionChip(
                     label: Text(tag),
@@ -129,43 +131,17 @@ class _SearchScreenState extends State<SearchScreen> {
               const SizedBox(height: 24),
             ],
 
-            // Search Dishes Results (if any)
-            if (hasSearch && searchDishes.isNotEmpty) ...[
-              SectionHeader(
-                title: 'Platillos coincidentes',
-                subtitle: '${searchDishes.length} resultados encontrados',
-              ),
-              ...searchDishes.map((dish) {
-                final restaurant = restaurantProvider.getRestaurantById(dish.restaurantId);
-                if (restaurant == null) return const SizedBox.shrink();
-                return FoodItemCard(
-                  foodItem: dish,
-                  onTap: () => FoodItemDetailSheet.show(
-                    context,
-                    foodItem: dish,
-                    restaurant: restaurant,
-                  ),
-                  onAdd: () => FoodItemDetailSheet.show(
-                    context,
-                    foodItem: dish,
-                    restaurant: restaurant,
-                  ),
-                );
-              }),
-              const SizedBox(height: 20),
-            ],
-
-            // Restaurants Results
+            // Dishes Results
             SectionHeader(
-              title: hasSearch ? 'Restaurantes' : 'Todos los restaurantes',
-              subtitle: '${filteredRestaurants.length} lugares disponibles',
+              title: hasSearch ? 'Resultados encontrados' : 'Carta de Pizzas',
+              subtitle: '${searchDishes.length} opciones disponibles',
             ),
 
-            if (filteredRestaurants.isEmpty && (!hasSearch || searchDishes.isEmpty))
+            if (searchDishes.isEmpty)
               EmptyStateView(
                 icon: Icons.search_off_rounded,
                 title: 'Sin resultados',
-                message: 'No encontramos ningún resultado para "${_controller.text}". Intenta con otra palabra o categoría.',
+                message: 'No encontramos ningún platillo para "${_controller.text}". Intenta con otra palabra o categoría.',
                 buttonText: 'Limpiar búsqueda',
                 onButtonPressed: () {
                   _controller.clear();
@@ -174,14 +150,32 @@ class _SearchScreenState extends State<SearchScreen> {
                 },
               )
             else
-              ...filteredRestaurants.map((restaurant) {
-                return RestaurantCard(
-                  restaurant: restaurant,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => RestaurantDetailScreen(restaurant: restaurant),
+              ...searchDishes.map((dish) {
+                return FoodItemCard(
+                  foodItem: dish,
+                  onTap: () => FoodItemDetailSheet.show(
+                    context,
+                    foodItem: dish,
+                    restaurant: pizzeria,
+                  ),
+                  onAdd: () {
+                    cartProvider.addItem(dish, pizzeria);
+                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('¡${dish.name} añadida al carrito! 🍕'),
+                        backgroundColor: AppColors.primary,
+                        duration: const Duration(seconds: 2),
+                        action: SnackBarAction(
+                          label: 'VER CARRITO',
+                          textColor: Colors.white,
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const CartScreen()),
+                            );
+                          },
+                        ),
                       ),
                     );
                   },
