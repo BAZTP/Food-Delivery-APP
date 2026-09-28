@@ -266,6 +266,8 @@ class AuthProvider extends ChangeNotifier {
             msg.contains('already exists') ||
             msg.contains('user_already_exists')) {
           _errorMessage = 'El correo "$cleanEmail" ya está registrado. Inicia sesión o recupera tu contraseña.';
+        } else if (msg.contains('rate limit') || msg.contains('rate_limit')) {
+          _errorMessage = 'Límite de correos superado en Supabase. Ve a tu panel de Supabase > Authentication > Providers > Email y desactiva la casilla "Confirm email" para registrar sin límites.';
         } else {
           _errorMessage = e.message;
         }
