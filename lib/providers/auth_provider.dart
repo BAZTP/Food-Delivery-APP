@@ -8,33 +8,18 @@ class AuthProvider extends ChangeNotifier {
   UserModel? _currentUser;
   bool _isAuthenticated = false;
   String? _errorMessage;
-  final List<AddressModel> _addresses = [
-    const AddressModel(
-      id: 'addr_default',
-      label: 'Casa',
-      street: 'Calle Principal',
-      number: '123',
-      reference: 'Frente al parque central',
-      city: 'Quito',
-      isDefault: true,
-    ),
-    const AddressModel(
-      id: 'addr_work',
-      label: 'Trabajo',
-      street: 'Av. Amazonas',
-      number: '456',
-      reference: 'Piso 4, Oficina 402',
-      city: 'Quito',
-      isDefault: false,
-    ),
-  ];
-  late AddressModel _selectedAddress;
+  final List<AddressModel> _addresses = [];
+  AddressModel _selectedAddress = const AddressModel(
+    id: 'addr_pending',
+    label: 'Sin dirección',
+    street: 'Selecciona tu ubicación',
+    number: '',
+    city: '',
+    isDefault: false,
+  );
+  bool get hasValidAddress => _selectedAddress.id != 'addr_pending';
 
   AuthProvider() {
-    _selectedAddress = _addresses.firstWhere(
-      (a) => a.isDefault,
-      orElse: () => _addresses.first,
-    );
     _checkInitialSession();
   }
 

@@ -18,7 +18,7 @@ class CartProvider extends ChangeNotifier {
 
   // Add item with restaurant check
   // Returns true if added, false if requires user confirmation to replace restaurant
-  bool addItem(FoodItemModel foodItem, RestaurantModel restaurant, {int quantity = 1, String specialInstructions = ''}) {
+  bool addItem(FoodItemModel foodItem, RestaurantModel restaurant, {int quantity = 1, String specialInstructions = '', PizzaSize? pizzaSize}) {
     if (_currentRestaurant != null && _currentRestaurant!.id != restaurant.id && _items.isNotEmpty) {
       // Trying to add from a different restaurant
       return false;
@@ -26,14 +26,17 @@ class CartProvider extends ChangeNotifier {
 
     _currentRestaurant = restaurant;
 
-    if (_items.containsKey(foodItem.id)) {
-      _items[foodItem.id]!.quantity += quantity;
+    final cartKey = '${foodItem.id}_${pizzaSize?.name ?? 'default'}';
+
+    if (_items.containsKey(cartKey)) {
+      _items[cartKey]!.quantity += quantity;
     } else {
-      _items[foodItem.id] = CartItemModel(
-        id: 'cart_${foodItem.id}',
+      _items[cartKey] = CartItemModel(
+        id: 'cart_$cartKey',
         foodItem: foodItem,
         quantity: quantity,
         specialInstructions: specialInstructions,
+        pizzaSize: pizzaSize,
       );
     }
 
@@ -42,9 +45,9 @@ class CartProvider extends ChangeNotifier {
   }
 
   // Force add by clearing old restaurant items
-  void forceAddItem(FoodItemModel foodItem, RestaurantModel restaurant, {int quantity = 1, String specialInstructions = ''}) {
+  void forceAddItem(FoodItemModel foodItem, RestaurantModel restaurant, {int quantity = 1, String specialInstructions = '', PizzaSize? pizzaSize}) {
     clearCart();
-    addItem(foodItem, restaurant, quantity: quantity, specialInstructions: specialInstructions);
+    addItem(foodItem, restaurant, quantity: quantity, specialInstructions: specialInstructions, pizzaSize: pizzaSize);
   }
 
   void incrementQuantity(String foodItemId) {

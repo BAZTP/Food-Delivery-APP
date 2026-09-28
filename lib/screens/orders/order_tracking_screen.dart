@@ -223,23 +223,6 @@ class OrderTrackingScreen extends StatelessWidget {
 
                   const SizedBox(height: 24),
 
-                  // Simulation Button for tester/evaluator convenience
-                  if (liveOrder.status != OrderStatus.delivered && liveOrder.status != OrderStatus.cancelled)
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 20),
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          orderProvider.advanceOrderStatus(liveOrder.id);
-                        },
-                        icon: const Icon(Icons.fast_forward_rounded),
-                        label: const Text('Simular avance al siguiente estado'),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                      ),
-                    ),
-
                   // 4. DRIVER CARD
                   Container(
                     padding: const EdgeInsets.all(16),

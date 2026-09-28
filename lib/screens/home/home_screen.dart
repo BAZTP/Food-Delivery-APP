@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/food_item_model.dart';
+import '../../models/order_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/cart_provider.dart';
+import '../../providers/order_provider.dart';
 import '../../providers/restaurant_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/address_selector_modal.dart';
@@ -13,7 +15,7 @@ import '../../widgets/empty_state_view.dart';
 import '../../widgets/food_item_card.dart';
 import '../../widgets/food_item_detail_sheet.dart';
 import '../../widgets/section_header.dart';
-import '../cart/cart_screen.dart';
+
 
 class HomeScreen extends StatefulWidget {
   final VoidCallback onNavigateToSearch;
@@ -41,6 +43,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showNotificationsSheet(BuildContext context) {
+    final cartProvider = Provider.of<CartProvider>(context, listen: false);
+    final orderProvider = Provider.of<OrderProvider>(context, listen: false);
+    final activeOrders = orderProvider.activeOrders;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -66,10 +72,56 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             const Text(
-              'Promociones Napoli Pizza 🍕',
+              'Notificaciones 🔔',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 14),
+
+            // Active orders notification
+            if (activeOrders.isNotEmpty)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.delivery_dining_rounded, color: Colors.blue),
+                ),
+                title: Text(
+                  '${activeOrders.length} pedido${activeOrders.length > 1 ? 's' : ''} en curso',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                subtitle: Text(
+                  'Pedido ${activeOrders.first.id}: ${activeOrders.first.status.displayName}',
+                ),
+              ),
+
+            // Cart notification
+            if (cartProvider.itemCount > 0) ...[
+              if (activeOrders.isNotEmpty) const Divider(),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.shopping_cart_rounded, color: AppColors.primary),
+                ),
+                title: Text(
+                  'Tienes ${cartProvider.itemCount} producto${cartProvider.itemCount > 1 ? 's' : ''} en tu carrito',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                subtitle: Text('Total: \$${cartProvider.total.toStringAsFixed(2)} — ¡No olvides hacer tu pedido!'),
+              ),
+            ],
+
+            const Divider(),
+
+            // Promos
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: Container(
@@ -97,6 +149,17 @@ class _HomeScreenState extends State<HomeScreen> {
               title: const Text('¡Envío GRATIS hoy!', style: TextStyle(fontWeight: FontWeight.w700)),
               subtitle: const Text('Disfruta de delivery sin costo en cualquier pedido a tu ubicación.'),
             ),
+
+            if (activeOrders.isEmpty && cartProvider.itemCount == 0) ...[
+              const Divider(),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  '✨ No tienes pedidos activos. ¡Explora nuestro menú y pide tu pizza favorita!',
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -105,30 +168,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _addItemToCart(BuildContext context, FoodItemModel dish) {
     final restaurantProvider = Provider.of<RestaurantProvider>(context, listen: false);
-    final cartProvider = Provider.of<CartProvider>(context, listen: false);
     final pizzeria = restaurantProvider.pizzeria;
 
-    cartProvider.addItem(dish, pizzeria);
-
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('¡${dish.name} añadida al carrito! 🍕'),
-        backgroundColor: AppColors.primary,
-        duration: const Duration(seconds: 2),
-        action: SnackBarAction(
-          label: 'VER CARRITO',
-          textColor: Colors.white,
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const CartScreen()),
-            );
-          },
-        ),
-      ),
+    // Open detail sheet so user can select size for pizzas
+    FoodItemDetailSheet.show(
+      context,
+      foodItem: dish,
+      restaurant: pizzeria,
     );
   }
+
 
   @override
   Widget build(BuildContext context) {

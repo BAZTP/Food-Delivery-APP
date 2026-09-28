@@ -255,7 +255,7 @@ class _CartScreenState extends State<CartScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  item.name,
+                                  '${item.name}${cartItem.sizeLabel.isNotEmpty ? ' (${cartItem.sizeLabel})' : ''}',
                                   style: const TextStyle(
                                     fontSize: 14.5,
                                     fontWeight: FontWeight.w700,
@@ -266,7 +266,7 @@ class _CartScreenState extends State<CartScreen> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  '\$${item.price.toStringAsFixed(2)} c/u',
+                                  '\$${cartItem.unitPrice.toStringAsFixed(2)} c/u',
                                   style: const TextStyle(
                                     fontSize: 13,
                                     color: AppColors.textSecondary,

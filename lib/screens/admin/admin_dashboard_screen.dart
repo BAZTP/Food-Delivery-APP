@@ -649,7 +649,7 @@ class _CrmOrderCard extends StatelessWidget {
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
-                    '${order.address.street} #${order.address.number}, ${order.address.city}',
+                    order.address.fullAddress,
                     style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,

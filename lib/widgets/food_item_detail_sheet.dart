@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../models/cart_item_model.dart';
 import '../models/food_item_model.dart';
 import '../models/restaurant_model.dart';
 import '../providers/auth_provider.dart';
@@ -40,6 +41,18 @@ class FoodItemDetailSheet extends StatefulWidget {
 class _FoodItemDetailSheetState extends State<FoodItemDetailSheet> {
   int _quantity = 1;
   final TextEditingController _notesController = TextEditingController();
+  PizzaSize? _selectedSize;
+
+  @override
+  void initState() {
+    super.initState();
+    final isPizza = widget.foodItem.categoryId.startsWith('cat_tradicionales') || 
+                    widget.foodItem.categoryId.startsWith('cat_gourmet') || 
+                    widget.foodItem.categoryId.startsWith('cat_calzones');
+    if (isPizza) {
+      _selectedSize = PizzaSize.mediana;
+    }
+  }
 
   @override
   void dispose() {
@@ -54,12 +67,15 @@ class _FoodItemDetailSheetState extends State<FoodItemDetailSheet> {
       widget.restaurant,
       quantity: _quantity,
       specialInstructions: _notesController.text.trim(),
+      pizzaSize: _selectedSize,
     );
 
     if (success) {
       Navigator.pop(context);
       final auth = Provider.of<AuthProvider>(context, listen: false);
       final currentAddress = auth.selectedAddress;
+      
+      final sizeName = _selectedSize != null ? ' (${_selectedSize!.displayName})' : '';
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -68,7 +84,7 @@ class _FoodItemDetailSheetState extends State<FoodItemDetailSheet> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '¡Se agregó ${widget.foodItem.name} a tu carrito!',
+                '¡Se agregó ${widget.foodItem.name}$sizeName a tu carrito!',
                 style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
               ),
               const SizedBox(height: 2),
@@ -114,6 +130,7 @@ class _FoodItemDetailSheetState extends State<FoodItemDetailSheet> {
                   widget.restaurant,
                   quantity: _quantity,
                   specialInstructions: _notesController.text.trim(),
+                  pizzaSize: _selectedSize,
                 );
                 Navigator.pop(ctx); // Close dialog
                 Navigator.pop(context); // Close sheet
@@ -134,7 +151,10 @@ class _FoodItemDetailSheetState extends State<FoodItemDetailSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final totalPrice = widget.foodItem.price * _quantity;
+    final unitPrice = _selectedSize != null
+        ? double.parse((widget.foodItem.price * _selectedSize!.priceMultiplier).toStringAsFixed(2))
+        : widget.foodItem.price;
+    final totalPrice = unitPrice * _quantity;
 
     return Container(
       decoration: const BoxDecoration(
@@ -207,7 +227,7 @@ class _FoodItemDetailSheetState extends State<FoodItemDetailSheet> {
                         ),
                       ),
                       Text(
-                        '\$${widget.foodItem.price.toStringAsFixed(2)}',
+                        '\$${unitPrice.toStringAsFixed(2)}',
                         style: const TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.w900,
@@ -283,6 +303,53 @@ class _FoodItemDetailSheetState extends State<FoodItemDetailSheet> {
                     ),
                   ),
                   const SizedBox(height: 24),
+                  if (_selectedSize != null) ...[
+                    const Text(
+                      'Tamaño de Pizza',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: PizzaSize.values.map((size) {
+                        final isSelected = _selectedSize == size;
+                        return Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() => _selectedSize = size),
+                            child: Container(
+                              margin: EdgeInsets.only(right: size != PizzaSize.grande ? 8 : 0),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              decoration: BoxDecoration(
+                                color: isSelected ? AppColors.primary : AppColors.surface,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isSelected ? AppColors.primary : AppColors.border,
+                                ),
+                              ),
+                              child: Column(
+                                children: [
+                                  Text(size.emoji, style: const TextStyle(fontSize: 20)),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    size.displayName,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                      color: isSelected ? Colors.white : AppColors.textPrimary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
                   // Quantity and Add to Cart Action
                   Row(
                     children: [

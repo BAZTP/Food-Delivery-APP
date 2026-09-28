@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../theme/app_colors.dart';
@@ -40,7 +42,7 @@ class AddressSelectorModal extends StatelessWidget {
               TextField(
                 controller: labelCtrl,
                 decoration: const InputDecoration(
-                  labelText: 'Etiqueta (Ej. Casa, Oficina, Pareja)',
+                  labelText: 'Etiqueta (Ej. Casa, Oficina)',
                   prefixIcon: Icon(Icons.bookmark_outline_rounded),
                 ),
               ),
@@ -59,7 +61,6 @@ class AddressSelectorModal extends StatelessWidget {
                 decoration: const InputDecoration(
                   labelText: 'Número / Piso / Dpto (Opcional)',
                   prefixIcon: Icon(Icons.tag_rounded),
-                  hintText: 'Ej. N24-105 o Piso 3',
                 ),
               ),
               const SizedBox(height: 12),
@@ -68,7 +69,6 @@ class AddressSelectorModal extends StatelessWidget {
                 decoration: const InputDecoration(
                   labelText: 'Referencia de entrega (Opcional)',
                   prefixIcon: Icon(Icons.explore_outlined),
-                  hintText: 'Ej. Casa blanca con portón negro',
                 ),
               ),
               const SizedBox(height: 12),
@@ -109,8 +109,8 @@ class AddressSelectorModal extends StatelessWidget {
                 selectAsCurrent: true,
               );
 
-              Navigator.pop(ctx); // Cierra dialog
-              Navigator.pop(context); // Cierra modal
+              Navigator.pop(ctx);
+              Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('📍 ¡Dirección actualizada para tu entrega!'),
@@ -125,9 +125,53 @@ class AddressSelectorModal extends StatelessWidget {
     );
   }
 
-  void _simulateGpsDetection(BuildContext context) {
+  Future<void> _detectRealGpsLocation(BuildContext context) async {
     final auth = Provider.of<AuthProvider>(context, listen: false);
 
+    // Check if location services are enabled
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Los servicios de ubicación están desactivados. Actívalos en Configuración.'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 4),
+        ),
+      );
+      return;
+    }
+
+    // Check and request permissions
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('❌ Permiso de ubicación denegado. Otórgalo en Configuración.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Permiso de ubicación denegado permanentemente. Ve a Configuración > Permisos.'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 5),
+        ),
+      );
+      return;
+    }
+
+    // Show loading dialog
+    if (!context.mounted) return;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -142,9 +186,9 @@ class AddressSelectorModal extends StatelessWidget {
               children: [
                 CircularProgressIndicator(color: AppColors.primary),
                 SizedBox(height: 16),
-                Text('Obteniendo ubicación GPS precisa...', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                Text('Obteniendo tu ubicación real...', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
                 SizedBox(height: 6),
-                Text('Conectando con satélites...', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                Text('Conectando con GPS del dispositivo...', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
               ],
             ),
           ),
@@ -152,34 +196,88 @@ class AddressSelectorModal extends StatelessWidget {
       ),
     );
 
-    Future.delayed(const Duration(milliseconds: 750), () {
-      if (!context.mounted) return;
-      Navigator.pop(context); // Cierra loading dialog
-
-      auth.updateLocationDirectly(
-        label: 'Ubicación GPS',
-        street: 'Av. República del Salvador y Naciones Unidas',
-        number: 'E8-12',
-        reference: 'Edificio Metropolitan, frente al Parque La Carolina',
-        city: 'Quito',
-      );
-
-      if (!context.mounted) return;
-      Navigator.pop(context); // Cierra modal
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('📍 ¡Ubicación GPS establecida: Av. República del Salvador!'),
-          backgroundColor: AppColors.primary,
-          duration: Duration(seconds: 3),
+    try {
+      // Get real position
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 15),
         ),
       );
-    });
+
+      // Reverse geocode to get address
+      List<Placemark> placemarks = await Geocoding().placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+      );
+
+      if (!context.mounted) return;
+      Navigator.pop(context); // Close loading dialog
+
+      if (placemarks.isNotEmpty) {
+        final place = placemarks.first;
+        final street = [
+          place.thoroughfare ?? '',
+          place.subThoroughfare ?? '',
+          if (place.subLocality != null && place.subLocality!.isNotEmpty) place.subLocality!,
+        ].where((s) => s.isNotEmpty).join(' ');
+
+        final city = place.locality ?? place.administrativeArea ?? 'Quito';
+
+        auth.updateLocationDirectly(
+          label: 'Ubicación GPS',
+          street: street.isEmpty ? 'Lat: ${position.latitude.toStringAsFixed(5)}, Lng: ${position.longitude.toStringAsFixed(5)}' : street,
+          number: place.subThoroughfare ?? '',
+          reference: [
+            if (place.subLocality != null && place.subLocality!.isNotEmpty) place.subLocality!,
+            if (place.postalCode != null && place.postalCode!.isNotEmpty) 'CP: ${place.postalCode}',
+          ].join(', '),
+          city: city,
+        );
+
+        if (!context.mounted) return;
+        Navigator.pop(context); // Close modal
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('📍 Ubicación GPS detectada: $street, $city'),
+            backgroundColor: AppColors.primary,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      } else {
+        // Fallback: use coordinates
+        auth.updateLocationDirectly(
+          label: 'Ubicación GPS',
+          street: 'Lat: ${position.latitude.toStringAsFixed(5)}, Lng: ${position.longitude.toStringAsFixed(5)}',
+          city: 'Ubicación detectada',
+        );
+        if (!context.mounted) return;
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('📍 Coordenadas GPS detectadas correctamente'),
+            backgroundColor: AppColors.primary,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      Navigator.pop(context); // Close loading
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Error al obtener ubicación: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final selectedAddress = authProvider.selectedAddress;
+    final hasAddresses = authProvider.addresses.isNotEmpty;
 
     return Container(
       decoration: const BoxDecoration(
@@ -239,11 +337,11 @@ class AddressSelectorModal extends StatelessWidget {
 
           const SizedBox(height: 16),
 
-          // Botón GPS Ubicación Actual destacado
+          // GPS Real Location Button
           Material(
             color: Colors.transparent,
             child: InkWell(
-              onTap: () => _simulateGpsDetection(context),
+              onTap: () => _detectRealGpsLocation(context),
               borderRadius: BorderRadius.circular(16),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -270,7 +368,7 @@ class AddressSelectorModal extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Usar mi ubicación actual (GPS)',
+                            'Detectar mi ubicación real (GPS)',
                             style: TextStyle(
                               color: AppColors.primary,
                               fontWeight: FontWeight.w800,
@@ -279,7 +377,7 @@ class AddressSelectorModal extends StatelessWidget {
                           ),
                           SizedBox(height: 2),
                           Text(
-                            'Detección automática en tiempo real',
+                            'Usa el GPS del dispositivo para ubicarte',
                             style: TextStyle(color: AppColors.textSecondary, fontSize: 11.5),
                           ),
                         ],
@@ -294,129 +392,141 @@ class AddressSelectorModal extends StatelessWidget {
 
           const SizedBox(height: 20),
 
-          const Text(
-            'Tus Direcciones Guardadas',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
-          ),
-          const SizedBox(height: 10),
+          if (hasAddresses) ...[
+            const Text(
+              'Tus Direcciones Guardadas',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+            ),
+            const SizedBox(height: 10),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 220),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: authProvider.addresses.length,
+                itemBuilder: (context, index) {
+                  final address = authProvider.addresses[index];
+                  final isSelected = selectedAddress.id == address.id;
 
-          // Lista de direcciones
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 250),
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: authProvider.addresses.length,
-              itemBuilder: (context, index) {
-                final address = authProvider.addresses[index];
-                final isSelected = selectedAddress.id == address.id;
-
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  decoration: BoxDecoration(
-                    color: isSelected ? AppColors.primary.withOpacity(0.08) : AppColors.surface,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: isSelected ? AppColors.primary : AppColors.border,
-                      width: isSelected ? 1.8 : 1,
-                    ),
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: ListTile(
-                      onTap: () {
-                        authProvider.selectAddress(address);
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('📍 Dirección activa: ${address.label}'),
-                            duration: const Duration(seconds: 2),
-                            backgroundColor: AppColors.primary,
-                          ),
-                        );
-                      },
-                      leading: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: isSelected ? AppColors.primary : AppColors.chipBackground,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          _getIconForLabel(address.label),
-                          color: isSelected ? Colors.white : AppColors.textSecondary,
-                          size: 18,
-                        ),
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    decoration: BoxDecoration(
+                      color: isSelected ? AppColors.primary.withOpacity(0.08) : AppColors.surface,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: isSelected ? AppColors.primary : AppColors.border,
+                        width: isSelected ? 1.8 : 1,
                       ),
-                      title: Row(
-                        children: [
-                          Text(
-                            address.label,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
-                              color: isSelected ? AppColors.primary : AppColors.textPrimary,
-                            ),
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: ListTile(
+                        onTap: () {
+                          authProvider.selectAddress(address);
+                          Navigator.pop(context);
+                        },
+                        leading: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: isSelected ? AppColors.primary : AppColors.chipBackground,
+                            shape: BoxShape.circle,
                           ),
-                          if (isSelected) ...[
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: AppColors.primary,
-                                borderRadius: BorderRadius.circular(6),
+                          child: Icon(
+                            _getIconForLabel(address.label),
+                            color: isSelected ? Colors.white : AppColors.textSecondary,
+                            size: 18,
+                          ),
+                        ),
+                        title: Row(
+                          children: [
+                            Text(
+                              address.label,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                                color: isSelected ? AppColors.primary : AppColors.textPrimary,
                               ),
-                              child: const Text(
-                                'SELECCIONADA',
-                                style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800),
+                            ),
+                            if (isSelected) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Text(
+                                  'ACTIVA',
+                                  style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800),
+                                ),
                               ),
+                            ],
+                          ],
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              address.fullAddress,
+                              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                            ),
+                            if (address.reference.isNotEmpty)
+                              Text(
+                                'Ref: ${address.reference}',
+                                style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: AppColors.textSecondary),
+                              ),
+                          ],
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (authProvider.addresses.length > 1 && !isSelected)
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.grey),
+                                onPressed: () => authProvider.removeAddress(address.id),
+                              ),
+                            Icon(
+                              isSelected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                              color: isSelected ? AppColors.primary : AppColors.border,
+                              size: 20,
                             ),
                           ],
-                        ],
-                      ),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            address.fullAddress,
-                            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                          ),
-                          if (address.reference.isNotEmpty)
-                            Text(
-                              'Ref: ${address.reference}',
-                              style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: AppColors.textSecondary),
-                            ),
-                        ],
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (authProvider.addresses.length > 1 && !isSelected)
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.grey),
-                              onPressed: () => authProvider.removeAddress(address.id),
-                            ),
-                          Icon(
-                            isSelected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
-                            color: isSelected ? AppColors.primary : AppColors.border,
-                            size: 20,
-                          ),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
-          ),
+          ] else
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.orange.withOpacity(0.3)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Aún no tienes direcciones guardadas. Usa el GPS o agrega una dirección manualmente para poder hacer pedidos.',
+                      style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           const SizedBox(height: 12),
 
-          // Botón agregar nueva dirección
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: () => _showAddAddressDialog(context),
               icon: const Icon(Icons.add_location_outlined),
-              label: const Text('Escribir otra dirección manualmente'),
+              label: const Text('Escribir dirección manualmente'),
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),

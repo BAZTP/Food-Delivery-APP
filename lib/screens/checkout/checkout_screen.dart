@@ -201,7 +201,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                               ),
                               const SizedBox(width: 10),
                               Text(
-                                cartItem.foodItem.name,
+                                '${cartItem.foodItem.name}${cartItem.sizeLabel.isNotEmpty ? ' (${cartItem.sizeLabel})' : ''}',
                                 style: const TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,

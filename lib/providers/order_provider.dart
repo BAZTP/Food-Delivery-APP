@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/supabase_config.dart';
@@ -12,7 +11,6 @@ import '../models/restaurant_model.dart';
 class OrderProvider extends ChangeNotifier {
   final List<OrderModel> _orders = [];
   OrderModel? _currentActiveOrder;
-  Timer? _simulationTimer;
 
   OrderProvider() {
     _initSampleOrders();
@@ -69,9 +67,6 @@ class OrderProvider extends ChangeNotifier {
       _saveOrderToSupabase(newOrder);
     }
 
-    // Start auto simulation of order progress
-    _startOrderSimulation(newOrder.id);
-
     return newOrder;
   }
 
@@ -89,7 +84,7 @@ class OrderProvider extends ChangeNotifier {
         'service_fee': 1.00,
         'discount': order.discount,
         'total': order.total,
-        'delivery_address': '${order.address.street} ${order.address.number}, ${order.address.city}',
+        'delivery_address': order.address.fullAddress,
         'payment_method': order.paymentMethod.title,
         'driver_name': order.driverName,
         'driver_phone': order.driverPhone,
@@ -99,8 +94,8 @@ class OrderProvider extends ChangeNotifier {
         await supabase.from('order_items').insert({
           'order_id': order.id,
           'food_item_id': item.foodItem.id,
-          'food_item_name': item.foodItem.name,
-          'food_item_price': item.foodItem.price,
+          'food_item_name': '${item.foodItem.name}${item.sizeLabel.isNotEmpty ? ' (${item.sizeLabel})' : ''}',
+          'food_item_price': item.unitPrice,
           'food_item_image': item.foodItem.imageUrl,
           'quantity': item.quantity,
           'special_instructions': item.specialInstructions,
@@ -165,26 +160,6 @@ class OrderProvider extends ChangeNotifier {
     }
   }
 
-  // Simulate progress automatically every 8 seconds for a lively demo
-  void _startOrderSimulation(String orderId) {
-    _simulationTimer?.cancel();
-    _simulationTimer = Timer.periodic(const Duration(seconds: 8), (timer) {
-      final index = _orders.indexWhere((o) => o.id == orderId);
-      if (index == -1) {
-        timer.cancel();
-        return;
-      }
-
-      final order = _orders[index];
-      if (order.status == OrderStatus.delivered || order.status == OrderStatus.cancelled) {
-        timer.cancel();
-        return;
-      }
-
-      advanceOrderStatus(orderId);
-    });
-  }
-
   void cancelOrder(String orderId) {
     final index = _orders.indexWhere((o) => o.id == orderId);
     if (index != -1) {
@@ -193,7 +168,6 @@ class OrderProvider extends ChangeNotifier {
       if (_currentActiveOrder?.id == orderId) {
         _currentActiveOrder = updated;
       }
-      _simulationTimer?.cancel();
       notifyListeners();
 
       if (SupabaseConfig.isConfigured) {
@@ -262,11 +236,5 @@ class OrderProvider extends ChangeNotifier {
     );
 
     _orders.add(sampleOrder);
-  }
-
-  @override
-  void dispose() {
-    _simulationTimer?.cancel();
-    super.dispose();
   }
 }

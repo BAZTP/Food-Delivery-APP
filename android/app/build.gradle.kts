@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.quickfood.quickfood"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

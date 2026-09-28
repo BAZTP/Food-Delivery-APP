@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../providers/cart_provider.dart';
 import '../../providers/restaurant_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/category_item.dart';
@@ -9,7 +8,6 @@ import '../../widgets/empty_state_view.dart';
 import '../../widgets/food_item_card.dart';
 import '../../widgets/food_item_detail_sheet.dart';
 import '../../widgets/section_header.dart';
-import '../cart/cart_screen.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -37,7 +35,6 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     final restaurantProvider = Provider.of<RestaurantProvider>(context);
-    final cartProvider = Provider.of<CartProvider>(context, listen: false);
     final pizzeria = restaurantProvider.pizzeria;
     final searchDishes = restaurantProvider.filteredMenuDishes;
     final categories = restaurantProvider.categories;
@@ -158,27 +155,11 @@ class _SearchScreenState extends State<SearchScreen> {
                     foodItem: dish,
                     restaurant: pizzeria,
                   ),
-                  onAdd: () {
-                    cartProvider.addItem(dish, pizzeria);
-                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('¡${dish.name} añadida al carrito! 🍕'),
-                        backgroundColor: AppColors.primary,
-                        duration: const Duration(seconds: 2),
-                        action: SnackBarAction(
-                          label: 'VER CARRITO',
-                          textColor: Colors.white,
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (context) => const CartScreen()),
-                            );
-                          },
-                        ),
-                      ),
-                    );
-                  },
+                  onAdd: () => FoodItemDetailSheet.show(
+                    context,
+                    foodItem: dish,
+                    restaurant: pizzeria,
+                  ),
                 );
               }),
           ],
